@@ -337,6 +337,7 @@ def emit_frame():
         e.BTN_TOUCH: int(visible_count > 0),
         e.BTN_LEFT: int(left_button and click_button == e.BTN_LEFT),
         e.BTN_RIGHT: int(left_button and click_button == e.BTN_RIGHT),
+        e.BTN_MIDDLE: int(left_button and click_button == e.BTN_MIDDLE),
     }
     for index, button in enumerate(TOOL_BUTTONS):
         desired_buttons[button] = int(visible_count == index + 1)
@@ -401,9 +402,22 @@ def handle_pad_event(event):
         # emitted button on press so releasing Control before the physical
         # click cannot strand a synthetic right button in the down state.
         if event.value == 1:
-            click_button = (
-                e.BTN_RIGHT if modifiers_down & CONTROL_MODIFIERS else e.BTN_LEFT
+            finger_count = max(
+                1,
+                sum(
+                    contact.tracking_id != -1 and contact.tool != MT_TOOL_PALM
+                    for contact in contacts.values()
+                ),
             )
+            if modifiers_down & CONTROL_MODIFIERS:
+                click_button = e.BTN_RIGHT
+                log("Control-click mapped to right button")
+            elif finger_count == 2:
+                click_button = e.BTN_RIGHT
+            elif finger_count >= 3:
+                click_button = e.BTN_MIDDLE
+            else:
+                click_button = e.BTN_LEFT
         left_button = event.value
         if left_button and not any(contact.state == "finger" for contact in contacts.values()):
             for contact in contacts.values():
@@ -495,7 +509,8 @@ def main():
 
     if not DRY_RUN:
         capabilities = {
-            e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_TOUCH] + TOOL_BUTTONS,
+            e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE, e.BTN_TOUCH]
+            + TOOL_BUTTONS,
             e.EV_ABS: [(code, info) for code, info in absolute_info.items()],
         }
         virtual_pad = evdev.UInput(
@@ -505,7 +520,10 @@ def main():
             product=pad.info.product,
             version=pad.info.version,
             bustype=pad.info.bustype,
-            input_props=[e.INPUT_PROP_POINTER, e.INPUT_PROP_BUTTONPAD],
+            # Expose real left/right/middle buttons instead of a one-button
+            # clickpad. Otherwise libinput replaces BTN_RIGHT using its own
+            # finger-count decision after this filter has mapped Control-click.
+            input_props=[e.INPUT_PROP_POINTER],
         )
         pad.grab()
 

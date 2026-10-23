@@ -98,7 +98,9 @@ begins while typing is withheld until it moves 5 mm; another keystroke instead
 confirms it as a palm. Recent central touches need 3 mm of movement, and recent
 edge touches need 5 mm. There is no fixed post-typing wait. Holding either
 Control key while physically clicking the touchpad changes that click to a
-right-click before Hyprland receives it.
+right-click before Hyprland receives it. Physical clicks with two or three
+fingers become right- and middle-clicks respectively; libinput continues to
+handle one-, two-, and three-finger taps.
 
 Classification decisions are available without recording key codes:
 

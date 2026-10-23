@@ -9,6 +9,12 @@ of `BTN_LEFT`. The choice is latched until release, avoiding stuck buttons if
 Control is released first. Doing this before Hyprland receives the event keeps
 normal pointer focus and works on application windows and shell layer surfaces.
 
+The virtual device exposes actual left, right and middle buttons rather than
+the kernel `INPUT_PROP_BUTTONPAD` marker. That marker makes libinput replace a
+button code using its own finger count, which erased the Control-click mapping.
+The filter therefore maps one-, two- and three-finger physical presses to left,
+right and middle itself; tap-to-click remains handled by libinput.
+
 ## Windows Hello-style face unlock
 
 The GZ302EA exposes a normal ASUS 5 MP camera at `/dev/video0` and a separate
