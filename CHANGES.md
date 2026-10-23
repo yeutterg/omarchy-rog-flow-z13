@@ -1,5 +1,13 @@
 # Changes from Omarchy defaults
 
+## Media-first function row
+
+The detachable keyboard defaults to F1-F12 on an unmodified key press. The
+installer sends the ASUS HID Fn-lock feature report to reverse that immediately
+and adds `asus_wmi.fnlock_default=N` to the Limine kernel command line so the
+choice survives reboot and keyboard reconnection. Brightness, volume, and the
+other printed media actions are the default; hold Fn for F1-F12.
+
 ## Dynamic GPU memory
 
 The factory configuration reserves 48 GiB of the 64 GiB unified-memory pool as

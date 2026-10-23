@@ -1,0 +1,56 @@
+#!/usr/bin/python3
+
+"""Switch the attached GZ302EA keyboard to media-first function-row mode."""
+
+import fcntl
+import os
+from pathlib import Path
+
+
+HID_ID = "0003:00000B05:00001A30"
+REPORT_SIZE = 64
+
+
+def read_properties(path: Path) -> dict[str, str]:
+    properties = {}
+    for line in path.read_text().splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            properties[key] = value
+    return properties
+
+
+def find_keyboard_control() -> Path:
+    matches = []
+    for device in Path("/sys/class/hidraw").glob("hidraw*"):
+        properties = read_properties(device / "device" / "uevent")
+        if (
+            properties.get("HID_ID") == HID_ID
+            and properties.get("HID_PHYS", "").endswith("/input0")
+            and properties.get("DRIVER") == "asus"
+        ):
+            matches.append(Path("/dev") / device.name)
+
+    if len(matches) != 1:
+        raise SystemExit(
+            f"Expected one GZ302EA keyboard control interface, found {len(matches)}"
+        )
+    return matches[0]
+
+
+def hid_iocsfeature(length: int) -> int:
+    # HIDIOCSFEATURE(length) from linux/hidraw.h on the x86_64 ioctl ABI.
+    return (3 << 30) | (length << 16) | (ord("H") << 8) | 0x06
+
+
+if os.geteuid() != 0:
+    raise SystemExit("Run this helper as root")
+
+keyboard = find_keyboard_control()
+report = bytearray(REPORT_SIZE)
+report[:4] = bytes((0x5A, 0xD0, 0x4E, 0x00))
+
+with keyboard.open("r+b", buffering=0) as device:
+    fcntl.ioctl(device.fileno(), hid_iocsfeature(REPORT_SIZE), report, True)
+
+print(f"Set {keyboard} to media-first function-row mode")

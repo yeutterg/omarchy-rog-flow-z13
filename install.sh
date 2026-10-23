@@ -83,9 +83,23 @@ configure_gpu_memory() {
   fi
 }
 
+configure_function_row() {
+  local helper=$repo/scripts/configure-function-row
+  if [[ $product != *GZ302EA* ]]; then
+    echo "Skipped GZ302EA-specific function-row configuration"
+    return 0
+  fi
+  if ((EUID == 0)); then
+    "$helper" --defer-boot-update
+  else
+    sudo "$helper" --defer-boot-update
+  fi
+}
+
 link_tree
 set_monitor_scale
 fix_alc294_routing
+configure_function_row
 configure_gpu_memory
 
-echo "Done. Hyprland reloads the monitor config automatically; reboot to apply GPU-memory changes."
+echo "Done. Hyprland reloads the monitor config automatically; reboot to apply persistent hardware defaults and GPU-memory changes."

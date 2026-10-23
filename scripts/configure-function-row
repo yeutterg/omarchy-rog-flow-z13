@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# Persist media-first function-row behavior and apply it to the attached
+# detachable keyboard immediately. Must run as root.
+
+set -euo pipefail
+
+if ((EUID != 0)); then
+  echo "Run this helper as root." >&2
+  exit 1
+fi
+
+repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+source_config=$repo/system/etc/limine-entry-tool.d/z13-function-row.conf
+target_config=/etc/limine-entry-tool.d/z13-function-row.conf
+product=$(cat /sys/class/dmi/id/product_name 2>/dev/null || true)
+
+if [[ $product != *GZ302EA* ]]; then
+  echo "Refusing function-row changes on unsupported hardware: ${product:-unknown}" >&2
+  exit 1
+fi
+
+install -Dm644 "$source_config" "$target_config"
+"$repo/scripts/set-function-row-media-first"
+
+if [[ ${1:-} != --defer-boot-update ]]; then
+  limine-update
+fi
+
+echo "Configured media-first function-row behavior; hold Fn for F1-F12"
