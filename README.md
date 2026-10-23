@@ -1,7 +1,13 @@
 # Omarchy config for the ASUS ROG Flow Z13
 
-Hardware-specific display, audio, input, and memory configuration for the 2025 ASUS
-ROG Flow Z13 on Omarchy.
+Hardware-specific display, audio, input, battery, and memory configuration for
+the 2025 ASUS ROG Flow Z13 on Omarchy.
+
+This layer installs
+[omarchy-touchscreen](https://github.com/yeutterg/omarchy-touchscreen) for
+generic touchscreen behavior. It does not install `omarchy-tablet`, so a Z13
+used as a desktop does not inherit the on-screen keyboard, mobile controls or
+tablet window gestures.
 
 ## Compatibility
 
@@ -26,7 +32,8 @@ Verified with:
 | Unified memory | Reduces fixed VRAM to 512 MiB and gives `amdgpu` a 48 GiB on-demand GTT pool, leaving almost all 64 GiB visible to Linux when the GPU is idle. |
 | Function row | Makes brightness, volume, and other media actions work without Fn; hold Fn for F1-F12. |
 | Touchpad | Replaces the fixed disable-while-typing pause with movement-based palm rejection that preserves deliberate motion and two-finger scrolling. |
-| Touchscreen apps | Binds the built-in touchscreen to `eDP-1` and runs Spotify through native Wayland, so touch keeps targeting the internal panel even when another monitor is focused. |
+| Touchscreen | Installs the shared touchscreen layer, which maps touch to the built-in display and runs Spotify through native Wayland. |
+| Battery care | Keeps the persistent charge ceiling at 80%; supports a one-shot 100% charge for travel. |
 | Face unlock | Installs a lock-screen-only PAM service for Biopass when its module is present. The Z13 has a Windows Hello-style IR camera but no fingerprint reader; enrollment and the Omarchy UI live in the private personal layer. |
 
 Current Omarchy and Linux releases already provide the base touchpad udev rule,
@@ -46,15 +53,16 @@ The installer:
 
 1. verifies the DMI product name;
 2. preserves replaced regular files as `<file>.pre-z13`;
-3. links the tracked user configuration into `$HOME` and enables Hyprland's
+3. installs the shared `omarchy-touchscreen` layer;
+4. links the tracked user configuration into `$HOME` and enables Hyprland's
    sorted hardware drop-ins;
-4. updates the untouched automatic display scale;
-5. restarts the user audio services when they are available;
-6. makes the detachable keyboard's function row media-first;
-7. installs and starts the Z13 palm-filter service;
-8. installs the lock-screen-only Biopass PAM service when Biopass is present;
-9. configures Spotify to use native Wayland; and
-10. configures the AMD UMA carveout and Limine kernel arguments for dynamic GPU
+5. updates the untouched automatic display scale;
+6. restarts the user audio services when they are available;
+7. makes the detachable keyboard's function row media-first;
+8. installs and starts the Z13 palm-filter service;
+9. installs the lock-screen-only Biopass PAM service when Biopass is present;
+10. sets the ASUS battery charge ceiling to 80%; and
+11. configures the AMD UMA carveout and Limine kernel arguments for dynamic GPU
    memory.
 
 It is safe to rerun. Pass `--force` only when deliberately testing the layer on
@@ -62,6 +70,26 @@ different hardware. System-level changes require `sudo`; the function-row and
 palm-filter changes apply immediately. Restart Spotify for native touch
 support. The persistent function-row default and memory change take effect
 after a reboot.
+
+## Battery care
+
+The installer uses the Z13's firmware-backed `asusctl` control to set an 80%
+charge ceiling. It persists through reboots and avoids keeping the battery at
+100% while the machine is docked. Lithium batteries do not benefit from
+scheduled deep-discharge cycles, so none are automated.
+
+For a trip, request one full charge without replacing the saved 80% ceiling:
+
+```bash
+~/dotfiles/omarchy-rog-flow-z13/scripts/configure-battery-care --full
+```
+
+To choose a different persistent ceiling, pass it directly (20–100), then run
+the installer later to return to the recommended default:
+
+```bash
+~/dotfiles/omarchy-rog-flow-z13/scripts/configure-battery-care 70
+```
 
 ## Palm-filter tuning
 

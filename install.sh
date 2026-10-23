@@ -15,6 +15,14 @@ if [[ $product != *GZ302EA* && $force != --force ]]; then
   exit 1
 fi
 
+install_touchscreen_layer() {
+  local touchscreen_repo=${OMARCHY_TOUCHSCREEN_DIR:-$(dirname "$repo")/omarchy-touchscreen}
+  if [[ ! -x $touchscreen_repo/install.sh ]]; then
+    git clone https://github.com/yeutterg/omarchy-touchscreen "$touchscreen_repo"
+  fi
+  "$touchscreen_repo/install.sh"
+}
+
 backup_path() {
   local source=$1 backup="$1.pre-z13"
   if [[ -e $backup || -L $backup ]]; then
@@ -153,12 +161,22 @@ configure_face_unlock_pam() {
   echo "Installed the lock-screen-only Biopass PAM service"
 }
 
+configure_battery_care() {
+  if [[ $product != *GZ302EA* ]]; then
+    echo "Skipped GZ302EA-specific battery-care configuration"
+    return 0
+  fi
+  "$repo/scripts/configure-battery-care"
+}
+
+install_touchscreen_layer
 link_tree
 ensure_hypr_extras_loader
 set_monitor_scale
 fix_alc294_routing
 configure_palm_filter
 configure_face_unlock_pam
+configure_battery_care
 configure_function_row
 configure_gpu_memory
 

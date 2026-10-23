@@ -14,7 +14,15 @@ Linux, and the available UVC auto-prober warns that probing unknown controls
 can corrupt camera firmware. The working setup uses the RGB camera with local
 software anti-spoofing.
 
-## Behavioral palm rejection and native Spotify touch
+## Battery charge ceiling
+
+The installer sets the ASUS firmware-backed charge limit to 80% through
+`asusctl`. This avoids long periods at 100% while docked, while
+`scripts/configure-battery-care --full` provides a one-shot full charge for
+travel and then returns to the saved ceiling. No periodic forced discharge is
+scheduled: deep cycling adds wear rather than conditioning a lithium battery.
+
+## Behavioral palm rejection
 
 The Z13 touchpad reports position and a firmware palm label but does not expose
 pressure or contact-size axes. Native libinput palm detection therefore has
@@ -29,18 +37,9 @@ contacts are promoted together for two-finger scrolling. The physical device
 is grabbed only while the service is healthy; if it exits, the grab is
 released and the original touchpad resumes.
 
-Spotify defaults to XWayland on this system even though its Chromium runtime
-contains native Wayland touch support. `spotify-flags.conf` selects the Wayland
-backend and its fractional-scale/window-decoration features. This keeps touch
-native instead of globally converting the touchscreen to mouse input, which
-would discard multitouch and interfere with applications that already handle
-touch correctly.
-
-The ELAN touchscreen is also explicitly bound to `eDP-1`. Hyprland otherwise
-falls back to the currently focused monitor for an unbound touch device, so a
-touch on the built-in panel can be routed to an external display whenever an
-external application has keyboard focus. The explicit binding fixes all apps
-on the internal panel rather than adding an application-specific click replay.
+Generic touchscreen-to-display mapping and Spotify's native Wayland flags now
+live in `omarchy-touchscreen`, which this repo installs as a dependency. This
+repo retains only the Z13-specific touchpad behavior.
 
 ## Media-first function row
 

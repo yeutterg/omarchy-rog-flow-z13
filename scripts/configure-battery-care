@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Keep the Z13 battery below a persistent ceiling. A one-shot full charge is
+# available for travel without changing the long-term limit.
+
+set -euo pipefail
+
+case ${1:-} in
+  --full)
+    exec asusctl battery oneshot 100
+    ;;
+  --help|-h)
+    echo "Usage: $0 [LIMIT|--full]"
+    echo "  LIMIT   persistent charge ceiling, 20-100 (default: 80)"
+    echo "  --full  charge to 100% once, then return to the saved ceiling"
+    exit 0
+    ;;
+  '')
+    limit=${Z13_BATTERY_LIMIT:-80}
+    ;;
+  *)
+    limit=$1
+    ;;
+esac
+
+if [[ ! ${limit:-} =~ ^[0-9]+$ ]] || ((limit < 20 || limit > 100)); then
+  echo "Battery limit must be an integer from 20 to 100." >&2
+  exit 2
+fi
+
+if ! command -v asusctl >/dev/null; then
+  echo "asusctl is required to set the ASUS battery charge limit." >&2
+  exit 1
+fi
+
+asusctl battery limit "$limit"
+asusctl battery info
+
