@@ -140,11 +140,25 @@ configure_palm_filter() {
   as_root systemctl enable --now z13-palm-filter.service
 }
 
+configure_face_unlock_pam() {
+  local pam_module=/usr/lib/security/libbiopass_pam.so
+  local pam_source=$repo/system/etc/pam.d/omarchy-lock-biopass
+
+  if [[ ! -f $pam_module ]]; then
+    echo "Skipped face-unlock PAM service because Biopass is not installed"
+    return 0
+  fi
+
+  as_root install -Dm644 "$pam_source" /etc/pam.d/omarchy-lock-biopass
+  echo "Installed the lock-screen-only Biopass PAM service"
+}
+
 link_tree
 ensure_hypr_extras_loader
 set_monitor_scale
 fix_alc294_routing
 configure_palm_filter
+configure_face_unlock_pam
 configure_function_row
 configure_gpu_memory
 

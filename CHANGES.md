@@ -1,5 +1,19 @@
 # Changes from Omarchy defaults
 
+## Windows Hello-style face unlock
+
+The GZ302EA exposes a normal ASUS 5 MP camera at `/dev/video0` and a separate
+greyscale IR camera at `/dev/video2`, but no fingerprint reader. When Biopass
+is installed, `install.sh` installs the dedicated `omarchy-lock-biopass` PAM
+service used by the personal Omarchy lock-screen plugin. It does not add face
+authentication to `sudo`, polkit, SDDM, or the system-wide PAM stack, and the
+normal password remains available in parallel.
+
+The IR sensor is not enabled by default: its emitter does not activate under
+Linux, and the available UVC auto-prober warns that probing unknown controls
+can corrupt camera firmware. The working setup uses the RGB camera with local
+software anti-spoofing.
+
 ## Behavioral palm rejection and native Spotify touch
 
 The Z13 touchpad reports position and a firmware palm label but does not expose

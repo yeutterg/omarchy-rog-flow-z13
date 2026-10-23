@@ -27,6 +27,7 @@ Verified with:
 | Function row | Makes brightness, volume, and other media actions work without Fn; hold Fn for F1-F12. |
 | Touchpad | Replaces the fixed disable-while-typing pause with movement-based palm rejection that preserves deliberate motion and two-finger scrolling. |
 | Touchscreen apps | Binds the built-in touchscreen to `eDP-1` and runs Spotify through native Wayland, so touch keeps targeting the internal panel even when another monitor is focused. |
+| Face unlock | Installs a lock-screen-only PAM service for Biopass when its module is present. The Z13 has a Windows Hello-style IR camera but no fingerprint reader; enrollment and the Omarchy UI live in the private personal layer. |
 
 Current Omarchy and Linux releases already provide the base touchpad udev rule,
 MT7925 Wi-Fi support, tablet-mode events, CS35L41 amplifier support, and ASUS
@@ -51,8 +52,9 @@ The installer:
 5. restarts the user audio services when they are available;
 6. makes the detachable keyboard's function row media-first;
 7. installs and starts the Z13 palm-filter service;
-8. configures Spotify to use native Wayland; and
-9. configures the AMD UMA carveout and Limine kernel arguments for dynamic GPU
+8. installs the lock-screen-only Biopass PAM service when Biopass is present;
+9. configures Spotify to use native Wayland; and
+10. configures the AMD UMA carveout and Limine kernel arguments for dynamic GPU
    memory.
 
 It is safe to rerun. Pass `--force` only when deliberately testing the layer on
