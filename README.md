@@ -1,41 +1,59 @@
-# Omarchy config for the ROG Flow Z13
+# Omarchy config for the ASUS ROG Flow Z13
 
-Desktop-oriented configuration for the 2025 ASUS ROG Flow Z13 running
-Omarchy 4. It currently verifies and supports the `GZ302EA` hardware in this
-machine; other Z13 generations and GZ302 variants should be added only after
-their device details are checked.
+Hardware-specific display and audio configuration for the 2025 ASUS ROG Flow
+Z13 on Omarchy.
 
-The model code stays inside the installer as a safety check, while the repo name
-uses the recognizable product family.
+## Compatibility
+
+The installer currently accepts DMI product names containing `GZ302EA`, the
+model on which these settings were verified. The broader repository name makes
+room for other Flow Z13 generations, but each model should be checked before it
+is added to the installer allowlist.
+
+Verified with:
+
+- ASUS ROG Flow Z13 GZ302EA
+- Omarchy 4.0.6
+- Linux 7.2
 
 ## What it configures
 
-- Changes Omarchy's automatic internal-display scale to `1.6` on first install.
-  Omarchy's normal display-scaling shortcuts can change it afterward.
-- Removes Omarchy's broad ASUS `alsa-soft-mixer.conf` override. The Z13 uses an
-  ALC294 codec, and the software-only mixer prevents PipeWire from managing the
-  speaker/headphone hardware switches during jack detection.
-- Enables automatic profiles and ports for the AMD HDMI audio controller, so
-  an attached display appears as an audio output.
+| Area | Change |
+|---|---|
+| Internal display | Changes Omarchy's untouched automatic scale to `1.6` on first install. Later choices made with Omarchy's display-scaling controls are preserved. |
+| Analog audio | Removes Omarchy's broad ASUS software-mixer override so WirePlumber can manage the ALC294 speaker and headphone switches during jack detection. |
+| HDMI audio | Enables automatic profiles and ports for the AMD HDMI audio controller so an attached display appears as an output. |
 
-Current Omarchy and Linux releases already provide the Z13 touchpad udev rule,
-native MT7925 Wi-Fi support, tablet-mode events, and CS35L41 amplifier support.
-This repo deliberately does not carry the old module and daemon workarounds for
-those components.
+Current Omarchy and Linux releases already provide the touchpad udev rule,
+MT7925 Wi-Fi support, tablet-mode events, CS35L41 amplifier support, and ASUS
+platform controls needed by this model. This repository does not duplicate
+those implementations, and it does not install tablet-mode UI or an on-screen
+keyboard.
 
 ## Install
-
-Clone and run the hardware layer:
 
 ```bash
 git clone https://github.com/yeutterg/omarchy-rog-flow-z13 ~/dotfiles/omarchy-rog-flow-z13
 ~/dotfiles/omarchy-rog-flow-z13/install.sh
 ```
 
-The installer verifies the DMI product name, backs up any real file it
-replaces as `<file>.pre-z13`, links the repo's `home/` tree into `$HOME`, and
-restarts the user audio services when available. Pass `--force` only when
-testing on different hardware.
+The installer:
 
-The generic `omarchy-tablet` and Dell Latitude 7350 repositories are separate
-optional layers and are not installed by this repo.
+1. verifies the DMI product name;
+2. preserves replaced regular files as `<file>.pre-z13`;
+3. links the tracked WirePlumber configuration into `$HOME`;
+4. updates the untouched automatic display scale; and
+5. restarts the user audio services when they are available.
+
+It is safe to rerun. Pass `--force` only when deliberately testing the layer on
+different hardware.
+
+## Updating
+
+```bash
+git -C ~/dotfiles/omarchy-rog-flow-z13 pull --ff-only
+~/dotfiles/omarchy-rog-flow-z13/install.sh
+```
+
+See [CHANGES.md](CHANGES.md) for the reason behind each setting and the
+upstream behavior that may eventually make it unnecessary.
