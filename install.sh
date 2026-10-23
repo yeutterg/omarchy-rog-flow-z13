@@ -70,8 +70,22 @@ fix_alc294_routing() {
   systemctl --user restart wireplumber pipewire pipewire-pulse 2>/dev/null || true
 }
 
+configure_gpu_memory() {
+  local helper=$repo/scripts/configure-gpu-memory
+  if [[ $product != *GZ302EA* ]]; then
+    echo "Skipped GZ302EA-specific GPU-memory configuration"
+    return 0
+  fi
+  if ((EUID == 0)); then
+    "$helper"
+  else
+    sudo "$helper"
+  fi
+}
+
 link_tree
 set_monitor_scale
 fix_alc294_routing
+configure_gpu_memory
 
-echo "Done. Hyprland reloads the monitor config automatically."
+echo "Done. Hyprland reloads the monitor config automatically; reboot to apply GPU-memory changes."

@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# Configure the GZ302EA for a minimal fixed UMA carveout and a large,
+# dynamically allocated amdgpu GTT pool. Must run as root.
+
+set -euo pipefail
+
+if ((EUID != 0)); then
+  echo "Run this helper as root." >&2
+  exit 1
+fi
+
+repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+source_config=$repo/system/etc/limine-entry-tool.d/z13-gpu-memory.conf
+target_config=/etc/limine-entry-tool.d/z13-gpu-memory.conf
+product=$(cat /sys/class/dmi/id/product_name 2>/dev/null || true)
+
+if [[ $product != *GZ302EA* ]]; then
+  echo "Refusing GPU-memory changes on unsupported hardware: ${product:-unknown}" >&2
+  exit 1
+fi
+
+uma_carveout=
+for candidate in /sys/class/drm/card*/device/uma/carveout; do
+  [[ -f $candidate ]] || continue
+  options=${candidate%/*}/carveout_options
+  [[ -r $options ]] || continue
+  grep -q '^0: Minimum (512 MB)$' "$options" || continue
+  if [[ -n $uma_carveout ]]; then
+    echo "Found more than one compatible UMA carveout control." >&2
+    exit 1
+  fi
+  uma_carveout=$candidate
+done
+
+if [[ -z $uma_carveout ]]; then
+  echo "The AMD UMA carveout control is unavailable; no changes made." >&2
+  exit 1
+fi
+
+install -Dm644 "$source_config" "$target_config"
+
+if [[ $(<"$uma_carveout") != 0 ]]; then
+  printf '0\n' >"$uma_carveout"
+  echo "Set the next-boot dedicated VRAM carveout to 512 MiB"
+else
+  echo "Dedicated VRAM carveout is already 512 MiB"
+fi
+
+limine-update
+echo "Configured a 48 GiB dynamic GTT pool; reboot to apply"

@@ -1,5 +1,20 @@
 # Changes from Omarchy defaults
 
+## Dynamic GPU memory
+
+The factory configuration reserves 48 GiB of the 64 GiB unified-memory pool as
+fixed VRAM, leaving Linux about 16 GiB of ordinary RAM. The installer uses the
+kernel's AMD UMA carveout interface to select the 512 MiB minimum for the next
+boot, then installs `z13-gpu-memory.conf` for Limine with:
+
+```text
+ttm.pages_limit=12582912 amdgpu.gttsize=49152
+```
+
+That permits `amdgpu` to allocate up to 48 GiB of GPU-accessible system memory
+on demand while keeping nearly all memory CPU-visible when the GPU is idle.
+Both the firmware carveout change and kernel arguments require a reboot.
+
 ## Internal display scale
 
 `install.sh` replaces Omarchy's untouched `"auto"` monitor scale with `1.6`.
