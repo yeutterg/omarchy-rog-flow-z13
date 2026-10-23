@@ -1,5 +1,14 @@
 # Changes from Omarchy defaults
 
+## Mac-style Control-click
+
+The touchpad filter already observes the detachable keyboard's modifier state
+for palm rejection. When either Control key is held as the physical touchpad
+button is pressed, it now emits `BTN_RIGHT` from the virtual touchpad instead
+of `BTN_LEFT`. The choice is latched until release, avoiding stuck buttons if
+Control is released first. Doing this before Hyprland receives the event keeps
+normal pointer focus and works on application windows and shell layer surfaces.
+
 ## Windows Hello-style face unlock
 
 The GZ302EA exposes a normal ASUS 5 MP camera at `/dev/video0` and a separate

@@ -71,6 +71,7 @@ POINTER_MODIFIERS = {
     e.KEY_LEFTMETA,
     e.KEY_RIGHTMETA,
 }
+CONTROL_MODIFIERS = {e.KEY_LEFTCTRL, e.KEY_RIGHTCTRL}
 TOOL_BUTTONS = [
     e.BTN_TOOL_FINGER,
     e.BTN_TOOL_DOUBLETAP,
@@ -266,6 +267,7 @@ contacts = {}
 last_slot_values = {}
 current_slot = 0
 left_button = 0
+click_button = e.BTN_LEFT
 
 output_contacts = {}
 output_slot = None
@@ -331,7 +333,11 @@ def emit_frame():
             del output_contacts[slot]
 
     visible_count = len(visible)
-    desired_buttons = {e.BTN_TOUCH: int(visible_count > 0), e.BTN_LEFT: left_button}
+    desired_buttons = {
+        e.BTN_TOUCH: int(visible_count > 0),
+        e.BTN_LEFT: int(left_button and click_button == e.BTN_LEFT),
+        e.BTN_RIGHT: int(left_button and click_button == e.BTN_RIGHT),
+    }
     for index, button in enumerate(TOOL_BUTTONS):
         desired_buttons[button] = int(visible_count == index + 1)
 
@@ -352,7 +358,7 @@ def emit_frame():
 
 
 def handle_pad_event(event):
-    global current_slot, left_button, dropping_events
+    global current_slot, left_button, click_button, dropping_events
 
     timestamp = event.timestamp()
     if event.type == e.EV_SYN:
@@ -391,6 +397,13 @@ def handle_pad_event(event):
         return
 
     if event.type == e.EV_KEY and event.code == e.BTN_LEFT:
+        # Match macOS Control-click at the input-device layer. Latch the
+        # emitted button on press so releasing Control before the physical
+        # click cannot strand a synthetic right button in the down state.
+        if event.value == 1:
+            click_button = (
+                e.BTN_RIGHT if modifiers_down & CONTROL_MODIFIERS else e.BTN_LEFT
+            )
         left_button = event.value
         if left_button and not any(contact.state == "finger" for contact in contacts.values()):
             for contact in contacts.values():
@@ -482,7 +495,7 @@ def main():
 
     if not DRY_RUN:
         capabilities = {
-            e.EV_KEY: [e.BTN_LEFT, e.BTN_TOUCH] + TOOL_BUTTONS,
+            e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_TOUCH] + TOOL_BUTTONS,
             e.EV_ABS: [(code, info) for code, info in absolute_info.items()],
         }
         virtual_pad = evdev.UInput(

@@ -31,7 +31,7 @@ Verified with:
 | HDMI audio | Enables automatic profiles and ports for the AMD HDMI audio controller so an attached display appears as an output. |
 | Unified memory | Reduces fixed VRAM to 512 MiB and gives `amdgpu` a 48 GiB on-demand GTT pool, leaving almost all 64 GiB visible to Linux when the GPU is idle. |
 | Function row | Makes brightness, volume, and other media actions work without Fn; hold Fn for F1-F12. |
-| Touchpad | Replaces the fixed disable-while-typing pause with movement-based palm rejection that preserves deliberate motion and two-finger scrolling. |
+| Touchpad | Replaces the fixed disable-while-typing pause with movement-based palm rejection that preserves deliberate motion and two-finger scrolling; Control-click emits a secondary click. |
 | Touchscreen | Installs the shared touchscreen layer, which maps touch to the built-in display and runs Spotify through native Wayland. |
 | Battery care | Keeps the persistent charge ceiling at 80%; supports a one-shot 100% charge for travel. |
 | Face unlock | Installs a lock-screen-only PAM service for Biopass when its module is present. The Z13 has a Windows Hello-style IR camera but no fingerprint reader; enrollment and the Omarchy UI live in the private personal layer. |
@@ -96,7 +96,9 @@ the installer later to return to the recommended default:
 The filter keeps normal touchpad behavior except around typing. A contact that
 begins while typing is withheld until it moves 5 mm; another keystroke instead
 confirms it as a palm. Recent central touches need 3 mm of movement, and recent
-edge touches need 5 mm. There is no fixed post-typing wait.
+edge touches need 5 mm. There is no fixed post-typing wait. Holding either
+Control key while physically clicking the touchpad changes that click to a
+right-click before Hyprland receives it.
 
 Classification decisions are available without recording key codes:
 
