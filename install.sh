@@ -24,6 +24,14 @@ backup_path() {
   echo "Moved existing $source to $backup"
 }
 
+as_root() {
+  if ((EUID == 0)); then
+    "$@"
+  else
+    sudo "$@"
+  fi
+}
+
 link_tree() {
   local rel target
   while IFS= read -r -d '' rel; do
@@ -38,6 +46,24 @@ link_tree() {
     ln -sfn "$repo/home/$rel" "$target"
     echo "Linked $target"
   done < <(cd "$repo/home" && find . -type f -print0)
+}
+
+ensure_hypr_extras_loader() {
+  local config=$HOME/.config/hypr/hyprland.lua
+  local loader='for file in io.popen("find -L ~/.config/hypr/extras -maxdepth 1 -type f -name '\''*.lua'\'' 2>/dev/null | sort"):lines() do dofile(file) end'
+  [[ -f $config ]] || return 0
+  grep -qF "$loader" "$config" && return 0
+
+  local block="
+-- Drop-in files from hardware and tablet layers, loaded in name order.
+$loader"
+  if grep -q '^require("default.hypr.toggles")' "$config"; then
+    BLOCK=$block awk '{ print } /^require\("default\.hypr\.toggles"\)/ { print ENVIRON["BLOCK"] }' "$config" >"$config.tmp"
+    mv "$config.tmp" "$config"
+  else
+    printf '%s\n' "$block" >>"$config"
+  fi
+  echo "Added the Hyprland extras loader to $config"
 }
 
 set_monitor_scale() {
@@ -96,10 +122,30 @@ configure_function_row() {
   fi
 }
 
+configure_palm_filter() {
+  if [[ $product != *GZ302EA* ]]; then
+    echo "Skipped GZ302EA-specific palm filter"
+    return 0
+  fi
+
+  if ! pacman -Q python-evdev >/dev/null 2>&1; then
+    as_root pacman -S --needed --noconfirm python-evdev
+  fi
+
+  as_root install -Dm755 "$repo/scripts/z13-palm-filter" /usr/local/libexec/z13-palm-filter
+  as_root install -Dm644 \
+    "$repo/system/etc/systemd/system/z13-palm-filter.service" \
+    /etc/systemd/system/z13-palm-filter.service
+  as_root systemctl daemon-reload
+  as_root systemctl enable --now z13-palm-filter.service
+}
+
 link_tree
+ensure_hypr_extras_loader
 set_monitor_scale
 fix_alc294_routing
+configure_palm_filter
 configure_function_row
 configure_gpu_memory
 
-echo "Done. Hyprland reloads the monitor config automatically; reboot to apply persistent hardware defaults and GPU-memory changes."
+echo "Done. Restart Spotify to use native Wayland touch; reboot to apply persistent hardware defaults and GPU-memory changes."

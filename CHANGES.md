@@ -1,5 +1,27 @@
 # Changes from Omarchy defaults
 
+## Behavioral palm rejection and native Spotify touch
+
+The Z13 touchpad reports position and a firmware palm label but does not expose
+pressure or contact-size axes. Native libinput palm detection therefore has
+less information than it receives from richer touchpads, while its
+disable-while-typing mode introduces a noticeable fixed pause.
+
+`z13-palm-filter` uses typing cadence, landing position, firmware labels, and
+movement instead. Suspicious contacts are promoted as soon as deliberate
+motion crosses a small distance, so the pointer does not wait on a timer.
+Stationary contacts followed by another keystroke are swallowed, and paired
+contacts are promoted together for two-finger scrolling. The physical device
+is grabbed only while the service is healthy; if it exits, the grab is
+released and the original touchpad resumes.
+
+Spotify defaults to XWayland on this system even though its Chromium runtime
+contains native Wayland touch support. `spotify-flags.conf` selects the Wayland
+backend and its fractional-scale/window-decoration features. This keeps touch
+native instead of globally converting the touchscreen to mouse input, which
+would discard multitouch and interfere with applications that already handle
+touch correctly.
+
 ## Media-first function row
 
 The detachable keyboard defaults to F1-F12 on an unmodified key press. The

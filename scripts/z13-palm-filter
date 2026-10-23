@@ -1,0 +1,537 @@
+#!/usr/bin/env python3
+"""Behavioral palm rejection for the ASUS ROG Flow Z13 GZ302EA.
+
+The touchpad exposes positions and a firmware palm flag, but no contact size
+or pressure. This filter therefore judges a contact by when and where it lands
+and how it moves. Suspicious contacts are withheld until deliberate movement
+promotes them; a following keystroke instead marks them as palms.
+
+Adapted from a16-palm-filter by zoan37:
+https://github.com/zoan37/omarchy-setup/blob/master/assets/zenbook-a16/a16-palm-filter
+Copyright (c) 2026 zoan37, used under the MIT License. See
+LICENSES/MIT-zoan37.txt in the source repository.
+"""
+
+import os
+import selectors
+import sys
+import syslog
+from collections import deque
+
+import evdev
+from evdev import ecodes as e
+
+
+PAD_NAME = "ASUSTeK Computer Inc. GZ302EA-Keyboard Touchpad"
+KEYBOARD_NAME = "ASUSTeK Computer Inc. GZ302EA-Keyboard"
+ASUS_VENDOR = 0x0B05
+Z13_KEYBOARD_PRODUCT = 0x1A30
+MT_TOOL_PALM = 2
+
+
+def env_float(name, default):
+    return float(os.environ.get(name, default))
+
+
+TYPING_SPAN = env_float("TYPING_SPAN", 1.2)
+TYPING_GAP = env_float("TYPING_GAP", 0.5)
+MIN_STROKES = int(env_float("MIN_STROKES", 2))
+HOLD = env_float("HOLD", 0.3)
+RECENT = env_float("RECENT", 1.2)
+SESSION = env_float("SESSION", 3.0)
+EDGE_MM = env_float("EDGE_MM", 10)
+TOP_MM = env_float("TOP_MM", 8)
+MOVE_MM = env_float("MOVE_MM", 4)
+TYPING_MOVE_MM = env_float("TYPING_MOVE_MM", 10)
+EDGE_MOVE_MM = env_float("EDGE_MOVE_MM", 8)
+REST_MOVE_MM = env_float("REST_MOVE_MM", 5)
+REST_STILL_MM = env_float("REST_STILL_MM", 1.5)
+REST_STILL_S = env_float("REST_STILL_S", 0.8)
+GROUP_S = env_float("GROUP_S", 0.2)
+DEBUG = os.environ.get("DEBUG", "0") == "1"
+DRY_RUN = "--dry" in sys.argv
+
+MODIFIERS = {
+    e.KEY_LEFTSHIFT,
+    e.KEY_RIGHTSHIFT,
+    e.KEY_LEFTCTRL,
+    e.KEY_RIGHTCTRL,
+    e.KEY_LEFTALT,
+    e.KEY_RIGHTALT,
+    e.KEY_LEFTMETA,
+    e.KEY_RIGHTMETA,
+    e.KEY_CAPSLOCK,
+    e.KEY_FN,
+}
+POINTER_MODIFIERS = {
+    e.KEY_LEFTCTRL,
+    e.KEY_RIGHTCTRL,
+    e.KEY_LEFTALT,
+    e.KEY_RIGHTALT,
+    e.KEY_LEFTMETA,
+    e.KEY_RIGHTMETA,
+}
+TOOL_BUTTONS = [
+    e.BTN_TOOL_FINGER,
+    e.BTN_TOOL_DOUBLETAP,
+    e.BTN_TOOL_TRIPLETAP,
+    e.BTN_TOOL_QUADTAP,
+    e.BTN_TOOL_QUINTTAP,
+]
+
+
+def log(message):
+    syslog.syslog(syslog.LOG_INFO, message)
+    if DEBUG or DRY_RUN:
+        print(message, flush=True)
+
+
+def matching_device(predicate):
+    for path in evdev.list_devices():
+        device = evdev.InputDevice(path)
+        if predicate(device):
+            return device
+        device.close()
+    return None
+
+
+resolution = 1
+x_max = 1
+y_max = 1
+slot_count = 1
+virtual_pad = None
+
+
+def millimeters(units):
+    return units / resolution
+
+
+# Keyboard state. Only timings are retained; key codes are never logged.
+keys_down = {}
+strokes = deque()
+modifiers_down = set()
+last_stroke = -1e9
+
+
+def handle_key(code, value, timestamp):
+    global last_stroke
+
+    if code in MODIFIERS:
+        (modifiers_down.add if value else modifiers_down.discard)(code)
+        return
+
+    if value == 1:
+        keys_down[code] = timestamp
+    elif value == 0 and code in keys_down:
+        if timestamp - keys_down.pop(code) < HOLD:
+            strokes.append(timestamp)
+            last_stroke = timestamp
+            for contact in contacts.values():
+                contact.on_keystroke()
+
+
+def recent_stroke_count(timestamp):
+    while strokes and timestamp - strokes[0] > TYPING_SPAN:
+        strokes.popleft()
+    held_briefly = sum(1 for pressed in keys_down.values() if timestamp - pressed < HOLD)
+    return len(strokes) + held_briefly
+
+
+def typing_active(timestamp):
+    young_presses = [pressed for pressed in keys_down.values() if timestamp - pressed < HOLD]
+    newest = max([last_stroke] + young_presses)
+    return recent_stroke_count(timestamp) >= MIN_STROKES and timestamp - newest < TYPING_GAP
+
+
+class Contact:
+    def __init__(self, slot, tracking_id, timestamp):
+        self.slot = slot
+        self.tracking_id = tracking_id
+        self.started = timestamp
+        self.x = None
+        self.y = None
+        self.tool = 0
+        self.state = None
+        self.reason = ""
+        self.required_movement = 0.0
+        self.anchor_x = 0
+        self.anchor_y = 0
+        self.start_x = 0
+        self.start_y = 0
+        self.max_travel = 0.0
+        self.history = deque()
+        self.promoted = False
+        self.output_tracking_id = None
+
+    def classify(self, timestamp):
+        self.anchor_x = self.start_x = self.x
+        self.anchor_y = self.start_y = self.y
+        in_edge = (
+            millimeters(self.x) < EDGE_MM
+            or millimeters(x_max - self.x) < EDGE_MM
+            or millimeters(self.y) < TOP_MM
+        )
+        visible_contacts = [
+            contact
+            for contact in contacts.values()
+            if contact is not self and contact.state == "finger"
+        ]
+
+        if self.tool == MT_TOOL_PALM:
+            self.set_state("palm", "firmware-palm")
+        elif modifiers_down & POINTER_MODIFIERS:
+            self.set_state("finger", "modifier")
+        elif typing_active(timestamp):
+            self.set_state("pending", "typing", TYPING_MOVE_MM)
+        elif visible_contacts and not in_edge:
+            self.set_state("finger", "with-finger")
+        elif timestamp - last_stroke < SESSION and in_edge:
+            self.set_state("pending", "edge", EDGE_MOVE_MM)
+        elif timestamp - last_stroke < RECENT:
+            self.set_state("pending", "recent", MOVE_MM)
+        else:
+            self.set_state("finger")
+
+    def set_state(self, state, reason="", required_movement=0.0):
+        self.state = state
+        self.reason = reason or self.reason
+        self.required_movement = required_movement
+        if state in ("pending", "rest"):
+            self.anchor_x = self.x
+            self.anchor_y = self.y
+
+    def on_keystroke(self):
+        if self.state == "pending":
+            self.set_state("palm", self.reason + "+key")
+
+    def distance_from(self, x, y):
+        return millimeters(((self.x - x) ** 2 + (self.y - y) ** 2) ** 0.5)
+
+    def update(self, timestamp):
+        self.max_travel = max(self.max_travel, self.distance_from(self.start_x, self.start_y))
+
+        if self.tool == MT_TOOL_PALM and self.state != "palm":
+            self.set_state("palm", "firmware-palm")
+            return
+
+        if self.state in ("pending", "rest"):
+            if self.distance_from(self.anchor_x, self.anchor_y) >= self.required_movement:
+                self.promote(timestamp)
+        elif self.state == "finger" and not left_button:
+            self.history.append((timestamp, self.x, self.y))
+            while self.history and timestamp - self.history[0][0] > REST_STILL_S:
+                self.history.popleft()
+
+            if typing_active(timestamp) and timestamp - self.started > REST_STILL_S and self.history:
+                xs = [sample[1] for sample in self.history]
+                ys = [sample[2] for sample in self.history]
+                if (
+                    millimeters(max(xs) - min(xs)) < REST_STILL_MM
+                    and millimeters(max(ys) - min(ys)) < REST_STILL_MM
+                ):
+                    self.set_state("rest", "resting", REST_MOVE_MM)
+                    self.history.clear()
+
+    def promote(self, timestamp):
+        self.state = "finger"
+        self.promoted = True
+        if DEBUG:
+            log(f"promoted slot {self.slot} ({self.reason}) after {timestamp - self.started:.2f}s")
+
+        # A two-finger scroll should begin as one gesture, not two staggered touches.
+        for contact in contacts.values():
+            if (
+                contact is not self
+                and contact.state == "pending"
+                and contact.reason != "edge"
+                and abs(contact.started - self.started) < GROUP_S
+            ):
+                contact.state = "finger"
+                contact.promoted = True
+
+    def finish(self, timestamp):
+        if self.state is None:
+            return
+        if self.state != "finger" or self.promoted or self.reason not in ("", "with-finger"):
+            normalized_x = 100 * self.start_x / x_max
+            normalized_y = 100 * self.start_y / y_max
+            log(
+                f"contact {self.state}{' promoted' if self.promoted else ''} "
+                f"reason={self.reason or '-'} duration={timestamp - self.started:.2f}s "
+                f"travel={self.max_travel:.1f}mm start=({normalized_x:.0f}%,{normalized_y:.0f}%)"
+            )
+
+
+contacts = {}
+last_slot_values = {}
+current_slot = 0
+left_button = 0
+
+output_contacts = {}
+output_slot = None
+output_buttons = {}
+output_xy = (None, None)
+next_tracking_id = 1
+dropping_events = False
+
+
+def emit_frame():
+    global output_slot, output_xy, next_tracking_id
+
+    events = []
+
+    def write(event_type, code, value):
+        events.append((event_type, code, value))
+
+    def select_slot(slot):
+        global output_slot
+        if output_slot != slot:
+            write(e.EV_ABS, e.ABS_MT_SLOT, slot)
+            output_slot = slot
+
+    visible = []
+    for slot in range(slot_count):
+        contact = contacts.get(slot)
+        is_visible = contact is not None and contact.state == "finger" and contact.x is not None
+        previous = output_contacts.get(slot)
+
+        if is_visible:
+            if previous is None:
+                contact.output_tracking_id = next_tracking_id
+                next_tracking_id = next_tracking_id % 65535 + 1
+                select_slot(slot)
+                write(e.EV_ABS, e.ABS_MT_TRACKING_ID, contact.output_tracking_id)
+                write(e.EV_ABS, e.ABS_MT_POSITION_X, contact.x)
+                write(e.EV_ABS, e.ABS_MT_POSITION_Y, contact.y)
+                write(e.EV_ABS, e.ABS_MT_TOOL_TYPE, contact.tool)
+            else:
+                _, previous_x, previous_y, previous_tool = previous
+                if (contact.x, contact.y, contact.tool) != (
+                    previous_x,
+                    previous_y,
+                    previous_tool,
+                ):
+                    select_slot(slot)
+                    if contact.x != previous_x:
+                        write(e.EV_ABS, e.ABS_MT_POSITION_X, contact.x)
+                    if contact.y != previous_y:
+                        write(e.EV_ABS, e.ABS_MT_POSITION_Y, contact.y)
+                    if contact.tool != previous_tool:
+                        write(e.EV_ABS, e.ABS_MT_TOOL_TYPE, contact.tool)
+            output_contacts[slot] = (
+                contact.output_tracking_id,
+                contact.x,
+                contact.y,
+                contact.tool,
+            )
+            visible.append(contact)
+        elif previous is not None:
+            select_slot(slot)
+            write(e.EV_ABS, e.ABS_MT_TRACKING_ID, -1)
+            del output_contacts[slot]
+
+    visible_count = len(visible)
+    desired_buttons = {e.BTN_TOUCH: int(visible_count > 0), e.BTN_LEFT: left_button}
+    for index, button in enumerate(TOOL_BUTTONS):
+        desired_buttons[button] = int(visible_count == index + 1)
+
+    for button, value in desired_buttons.items():
+        if output_buttons.get(button, 0) != value:
+            write(e.EV_KEY, button, value)
+            output_buttons[button] = value
+
+    if visible and (visible[0].x, visible[0].y) != output_xy:
+        output_xy = (visible[0].x, visible[0].y)
+        write(e.EV_ABS, e.ABS_X, output_xy[0])
+        write(e.EV_ABS, e.ABS_Y, output_xy[1])
+
+    if events and virtual_pad:
+        for event in events:
+            virtual_pad.write(*event)
+        virtual_pad.syn()
+
+
+def handle_pad_event(event):
+    global current_slot, left_button, dropping_events
+
+    timestamp = event.timestamp()
+    if event.type == e.EV_SYN:
+        if event.code == e.SYN_DROPPED:
+            dropping_events = True
+            return
+        if event.code != e.SYN_REPORT:
+            return
+        if dropping_events:
+            dropping_events = False
+            for contact in contacts.values():
+                contact.finish(timestamp)
+            contacts.clear()
+            emit_frame()
+            return
+
+        for contact in contacts.values():
+            if (
+                contact.state is None
+                and contact.tracking_id != -1
+                and contact.x is not None
+                and contact.y is not None
+            ):
+                contact.classify(timestamp)
+
+        for slot, contact in list(contacts.items()):
+            if contact.tracking_id == -1:
+                contact.finish(timestamp)
+                del contacts[slot]
+            elif contact.state:
+                contact.update(timestamp)
+        emit_frame()
+        return
+
+    if dropping_events:
+        return
+
+    if event.type == e.EV_KEY and event.code == e.BTN_LEFT:
+        left_button = event.value
+        if left_button and not any(contact.state == "finger" for contact in contacts.values()):
+            for contact in contacts.values():
+                if contact.state in ("pending", "rest"):
+                    contact.reason += "+click"
+                    contact.promote(timestamp)
+        return
+
+    if event.type != e.EV_ABS:
+        return
+
+    if event.code == e.ABS_MT_SLOT:
+        current_slot = event.value
+    elif event.code == e.ABS_MT_TRACKING_ID:
+        previous = contacts.get(current_slot)
+        if event.value == -1:
+            if previous:
+                previous.tracking_id = -1
+        else:
+            if previous and previous.tracking_id != -1:
+                previous.finish(timestamp)
+            contact = Contact(current_slot, event.value, timestamp)
+            contact.x, contact.y, contact.tool = last_slot_values.get(
+                current_slot, (None, None, 0)
+            )
+            contacts[current_slot] = contact
+    elif event.code in (e.ABS_MT_POSITION_X, e.ABS_MT_POSITION_Y, e.ABS_MT_TOOL_TYPE):
+        last_x, last_y, last_tool = last_slot_values.get(current_slot, (None, None, 0))
+        if event.code == e.ABS_MT_POSITION_X:
+            last_x = event.value
+        elif event.code == e.ABS_MT_POSITION_Y:
+            last_y = event.value
+        else:
+            last_tool = event.value
+        last_slot_values[current_slot] = (last_x, last_y, last_tool)
+        contact = contacts.get(current_slot)
+        if contact:
+            contact.x, contact.y, contact.tool = last_x, last_y, last_tool
+
+
+def is_physical_pad(device):
+    return (
+        device.name == PAD_NAME
+        and device.info.vendor == ASUS_VENDOR
+        and device.info.product == Z13_KEYBOARD_PRODUCT
+        and "palm filter" not in device.name.lower()
+    )
+
+
+def main():
+    global resolution, x_max, y_max, slot_count, virtual_pad
+
+    pad = matching_device(is_physical_pad)
+    if not pad:
+        sys.exit(f"touchpad not found: {PAD_NAME}")
+
+    keyboards = []
+    for path in evdev.list_devices():
+        device = evdev.InputDevice(path)
+        keys = device.capabilities().get(e.EV_KEY, [])
+        if (
+            device.name == KEYBOARD_NAME
+            and device.info.vendor == ASUS_VENDOR
+            and device.info.product == Z13_KEYBOARD_PRODUCT
+            and e.KEY_A in keys
+        ):
+            keyboards.append(device)
+        else:
+            device.close()
+
+    if not keyboards:
+        pad.close()
+        sys.exit(f"internal keyboard not found: {KEYBOARD_NAME}")
+
+    absolute_codes = (
+        e.ABS_X,
+        e.ABS_Y,
+        e.ABS_MT_SLOT,
+        e.ABS_MT_POSITION_X,
+        e.ABS_MT_POSITION_Y,
+        e.ABS_MT_TOOL_TYPE,
+        e.ABS_MT_TRACKING_ID,
+    )
+    absolute_info = {code: pad.absinfo(code) for code in absolute_codes}
+    resolution = absolute_info[e.ABS_MT_POSITION_X].resolution or 1
+    x_max = absolute_info[e.ABS_MT_POSITION_X].max
+    y_max = absolute_info[e.ABS_MT_POSITION_Y].max
+    slot_count = absolute_info[e.ABS_MT_SLOT].max + 1
+
+    if not DRY_RUN:
+        capabilities = {
+            e.EV_KEY: [e.BTN_LEFT, e.BTN_TOUCH] + TOOL_BUTTONS,
+            e.EV_ABS: [(code, info) for code, info in absolute_info.items()],
+        }
+        virtual_pad = evdev.UInput(
+            capabilities,
+            name=PAD_NAME + " (palm filter)",
+            vendor=pad.info.vendor,
+            product=pad.info.product,
+            version=pad.info.version,
+            bustype=pad.info.bustype,
+            input_props=[e.INPUT_PROP_POINTER, e.INPUT_PROP_BUTTONPAD],
+        )
+        pad.grab()
+
+    syslog.openlog("z13-palm-filter")
+    log(
+        f"started{' dry-run' if DRY_RUN else ''}: pad={pad.path} "
+        f"keyboards={[keyboard.path for keyboard in keyboards]} slots={slot_count} "
+        f"resolution={resolution}/mm typing={MIN_STROKES}/{TYPING_SPAN}s "
+        f"gap={TYPING_GAP}s recent={RECENT}s session={SESSION}s "
+        f"edge={EDGE_MM}mm top={TOP_MM}mm "
+        f"movement={MOVE_MM}/{TYPING_MOVE_MM}/{EDGE_MOVE_MM}/{REST_MOVE_MM}mm"
+    )
+
+    selector = selectors.DefaultSelector()
+    selector.register(pad, selectors.EVENT_READ, "pad")
+    for keyboard in keyboards:
+        selector.register(keyboard, selectors.EVENT_READ, "keyboard")
+
+    try:
+        while True:
+            for key, _ in selector.select():
+                device = key.fileobj
+                for event in device.read():
+                    if key.data == "keyboard":
+                        if event.type == e.EV_KEY and event.value in (0, 1):
+                            handle_key(event.code, event.value, event.timestamp())
+                    else:
+                        handle_pad_event(event)
+    finally:
+        if virtual_pad:
+            try:
+                pad.ungrab()
+            except OSError:
+                pass
+            virtual_pad.close()
+        pad.close()
+        for keyboard in keyboards:
+            keyboard.close()
+
+
+if __name__ == "__main__":
+    main()

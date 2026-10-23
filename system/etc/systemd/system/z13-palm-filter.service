@@ -1,0 +1,45 @@
+[Unit]
+Description=Behavioral palm rejection for the ROG Flow Z13 touchpad
+Documentation=https://github.com/yeutterg/omarchy-rog-flow-z13
+After=systemd-udev-settle.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/z13-palm-filter
+Restart=on-failure
+RestartSec=2
+
+# Favor deliberate motion over a fixed post-typing delay.
+Environment=TYPING_GAP=0.35
+Environment=RECENT=0.40
+Environment=SESSION=1.40
+Environment=MOVE_MM=3
+Environment=TYPING_MOVE_MM=5
+Environment=EDGE_MOVE_MM=5
+Environment=REST_MOVE_MM=4
+
+# This service must open the physical input nodes and /dev/uinput. Everything
+# else is constrained because it runs as root.
+NoNewPrivileges=yes
+UMask=0077
+CapabilityBoundingSet=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+DevicePolicy=closed
+DeviceAllow=char-input rw
+DeviceAllow=/dev/uinput rw
+
+[Install]
+WantedBy=multi-user.target

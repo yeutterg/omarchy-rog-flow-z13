@@ -1,6 +1,6 @@
 # Omarchy config for the ASUS ROG Flow Z13
 
-Hardware-specific display, audio, and memory configuration for the 2025 ASUS
+Hardware-specific display, audio, input, and memory configuration for the 2025 ASUS
 ROG Flow Z13 on Omarchy.
 
 ## Compatibility
@@ -25,12 +25,14 @@ Verified with:
 | HDMI audio | Enables automatic profiles and ports for the AMD HDMI audio controller so an attached display appears as an output. |
 | Unified memory | Reduces fixed VRAM to 512 MiB and gives `amdgpu` a 48 GiB on-demand GTT pool, leaving almost all 64 GiB visible to Linux when the GPU is idle. |
 | Function row | Makes brightness, volume, and other media actions work without Fn; hold Fn for F1-F12. |
+| Touchpad | Replaces the fixed disable-while-typing pause with movement-based palm rejection that preserves deliberate motion and two-finger scrolling. |
+| Touchscreen apps | Runs Spotify through native Wayland so Chromium's Wayland touch path receives touchscreen events. |
 
-Current Omarchy and Linux releases already provide the touchpad udev rule,
+Current Omarchy and Linux releases already provide the base touchpad udev rule,
 MT7925 Wi-Fi support, tablet-mode events, CS35L41 amplifier support, and ASUS
-platform controls needed by this model. This repository does not duplicate
-those implementations, and it does not install tablet-mode UI or an on-screen
-keyboard.
+platform controls needed by this model. This repository adds a behavioral
+filter because the touchpad does not expose contact pressure or size. It does
+not install tablet-mode UI or an on-screen keyboard.
 
 ## Install
 
@@ -43,17 +45,38 @@ The installer:
 
 1. verifies the DMI product name;
 2. preserves replaced regular files as `<file>.pre-z13`;
-3. links the tracked WirePlumber configuration into `$HOME`;
+3. links the tracked user configuration into `$HOME` and enables Hyprland's
+   sorted hardware drop-ins;
 4. updates the untouched automatic display scale;
 5. restarts the user audio services when they are available;
-6. makes the detachable keyboard's function row media-first; and
-7. configures the AMD UMA carveout and Limine kernel arguments for dynamic GPU
+6. makes the detachable keyboard's function row media-first;
+7. installs and starts the Z13 palm-filter service;
+8. configures Spotify to use native Wayland; and
+9. configures the AMD UMA carveout and Limine kernel arguments for dynamic GPU
    memory.
 
 It is safe to rerun. Pass `--force` only when deliberately testing the layer on
-different hardware. System-level changes require `sudo`; the function-row
-change applies immediately, while its persistent default and the memory change
-take effect after a reboot.
+different hardware. System-level changes require `sudo`; the function-row and
+palm-filter changes apply immediately. Restart Spotify for native touch
+support. The persistent function-row default and memory change take effect
+after a reboot.
+
+## Palm-filter tuning
+
+The filter keeps normal touchpad behavior except around typing. A contact that
+begins while typing is withheld until it moves 5 mm; another keystroke instead
+confirms it as a palm. Recent central touches need 3 mm of movement, and recent
+edge touches need 5 mm. There is no fixed post-typing wait.
+
+Classification decisions are available without recording key codes:
+
+```bash
+journalctl -u z13-palm-filter.service -f
+```
+
+The thresholds are environment values in
+`system/etc/systemd/system/z13-palm-filter.service`. Re-run `install.sh` after
+changing them.
 
 ## Updating
 
