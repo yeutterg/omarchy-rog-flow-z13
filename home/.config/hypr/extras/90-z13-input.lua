@@ -6,6 +6,11 @@ hl.config({
     touchpad = {
       disable_while_typing = false,
     },
+    -- Without an explicit output Hyprland maps touch to the focused monitor,
+    -- which makes the built-in panel stop working when an external is focused.
+    touchdevice = {
+      output = "eDP-1",
+    },
   },
 })
 

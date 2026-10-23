@@ -22,6 +22,12 @@ native instead of globally converting the touchscreen to mouse input, which
 would discard multitouch and interfere with applications that already handle
 touch correctly.
 
+The ELAN touchscreen is also explicitly bound to `eDP-1`. Hyprland otherwise
+falls back to the currently focused monitor for an unbound touch device, so a
+touch on the built-in panel can be routed to an external display whenever an
+external application has keyboard focus. The explicit binding fixes all apps
+on the internal panel rather than adding an application-specific click replay.
+
 ## Media-first function row
 
 The detachable keyboard defaults to F1-F12 on an unmodified key press. The

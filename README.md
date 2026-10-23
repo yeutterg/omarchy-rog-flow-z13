@@ -26,7 +26,7 @@ Verified with:
 | Unified memory | Reduces fixed VRAM to 512 MiB and gives `amdgpu` a 48 GiB on-demand GTT pool, leaving almost all 64 GiB visible to Linux when the GPU is idle. |
 | Function row | Makes brightness, volume, and other media actions work without Fn; hold Fn for F1-F12. |
 | Touchpad | Replaces the fixed disable-while-typing pause with movement-based palm rejection that preserves deliberate motion and two-finger scrolling. |
-| Touchscreen apps | Runs Spotify through native Wayland so Chromium's Wayland touch path receives touchscreen events. |
+| Touchscreen apps | Binds the built-in touchscreen to `eDP-1` and runs Spotify through native Wayland, so touch keeps targeting the internal panel even when another monitor is focused. |
 
 Current Omarchy and Linux releases already provide the base touchpad udev rule,
 MT7925 Wi-Fi support, tablet-mode events, CS35L41 amplifier support, and ASUS
