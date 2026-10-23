@@ -1,12 +1,5 @@
 # Changes from Omarchy defaults
 
-## Detachable keyboard state
-
-`home/.config/omarchy/onscreen-keyboard.json` names the keyboard cover's
-touchpad exactly as Linux reports it on the GZ302EA. The on-screen keyboard can
-therefore determine cover attachment immediately at login instead of waiting
-for the first `SW_TABLET_MODE` event.
-
 ## Internal display scale
 
 `install.sh` replaces Omarchy's untouched `"auto"` monitor scale with `1.6`.

@@ -74,4 +74,4 @@ link_tree
 set_monitor_scale
 fix_alc294_routing
 
-echo "Done. Hyprland reloads the monitor config automatically; log out and back in once after installing the shared tablet layer."
+echo "Done. Hyprland reloads the monitor config automatically."
