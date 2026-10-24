@@ -50,6 +50,9 @@ REST_STILL_S = env_float("REST_STILL_S", 0.8)
 GROUP_S = env_float("GROUP_S", 0.2)
 DEBUG = os.environ.get("DEBUG", "0") == "1"
 DRY_RUN = "--dry" in sys.argv
+SECONDARY_CLICK_MODE = os.environ.get("SECONDARY_CLICK_MODE", "finger-count")
+if SECONDARY_CLICK_MODE not in ("finger-count", "control-only"):
+    sys.exit("SECONDARY_CLICK_MODE must be finger-count or control-only")
 
 MODIFIERS = {
     e.KEY_LEFTSHIFT,
@@ -412,9 +415,9 @@ def handle_pad_event(event):
             if modifiers_down & CONTROL_MODIFIERS:
                 click_button = e.BTN_RIGHT
                 log("Control-click mapped to right button")
-            elif finger_count == 2:
+            elif SECONDARY_CLICK_MODE == "finger-count" and finger_count == 2:
                 click_button = e.BTN_RIGHT
-            elif finger_count >= 3:
+            elif SECONDARY_CLICK_MODE == "finger-count" and finger_count >= 3:
                 click_button = e.BTN_MIDDLE
             else:
                 click_button = e.BTN_LEFT
@@ -534,7 +537,8 @@ def main():
         f"resolution={resolution}/mm typing={MIN_STROKES}/{TYPING_SPAN}s "
         f"gap={TYPING_GAP}s recent={RECENT}s session={SESSION}s "
         f"edge={EDGE_MM}mm top={TOP_MM}mm "
-        f"movement={MOVE_MM}/{TYPING_MOVE_MM}/{EDGE_MOVE_MM}/{REST_MOVE_MM}mm"
+        f"movement={MOVE_MM}/{TYPING_MOVE_MM}/{EDGE_MOVE_MM}/{REST_MOVE_MM}mm "
+        f"secondary-click={SECONDARY_CLICK_MODE}"
     )
 
     selector = selectors.DefaultSelector()

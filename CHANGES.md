@@ -15,6 +15,10 @@ button code using its own finger count, which erased the Control-click mapping.
 The filter therefore maps one-, two- and three-finger physical presses to left,
 right and middle itself; tap-to-click remains handled by libinput.
 
+`SECONDARY_CLICK_MODE=control-only` is available for a personal systemd
+override. It makes every unmodified physical press a primary click while
+retaining Control-click; the hardware layer's default remains `finger-count`.
+
 ## Windows Hello-style face unlock
 
 The GZ302EA exposes a normal ASUS 5 MP camera at `/dev/video0` and a separate

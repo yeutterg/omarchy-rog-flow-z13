@@ -109,8 +109,10 @@ journalctl -u z13-palm-filter.service -f
 ```
 
 The thresholds are environment values in
-`system/etc/systemd/system/z13-palm-filter.service`. Re-run `install.sh` after
-changing them.
+`system/etc/systemd/system/z13-palm-filter.service`. The optional
+`SECONDARY_CLICK_MODE=control-only` setting keeps every unmodified physical
+press primary and allows only Control-click to emit a secondary click; the
+default remains `finger-count`. Re-run `install.sh` after changing them.
 
 ## Updating
 
