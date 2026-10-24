@@ -28,10 +28,13 @@ service used by the personal Omarchy lock-screen plugin. It does not add face
 authentication to `sudo`, polkit, SDDM, or the system-wide PAM stack, and the
 normal password remains available in parallel.
 
-The IR sensor is not enabled by default: its emitter does not activate under
-Linux, and the available UVC auto-prober warns that probing unknown controls
-can corrupt camera firmware. The working setup uses the RGB camera with local
-software anti-spoofing.
+The IR sensor works as a standard greyscale UVC stream. On this unit it emits
+alternating illuminated and black synchronization frames as soon as `/dev/video2`
+is streamed, so no firmware-risking UVC control probe is needed. After guided
+IR enrollment, the personal Biopass configuration uses that sensor as its
+primary camera for recognition in darkness and retains local software
+anti-spoofing. Biopass's separate IR field is then disabled because upstream
+implements it as presence-only and would try to open the same sensor twice.
 
 ## Battery charge ceiling
 

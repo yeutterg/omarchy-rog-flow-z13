@@ -34,7 +34,7 @@ Verified with:
 | Touchpad | Replaces the fixed disable-while-typing pause with movement-based palm rejection that preserves deliberate motion and two-finger scrolling; Control-click emits a secondary click. |
 | Touchscreen | Installs the shared touchscreen layer, which maps touch to the built-in display and runs Spotify through native Wayland. |
 | Battery care | Keeps the persistent charge ceiling at 80%; supports a one-shot 100% charge for travel. |
-| Face unlock | Installs a lock-screen-only PAM service for Biopass when its module is present. The Z13 has a Windows Hello-style IR camera but no fingerprint reader; enrollment and the Omarchy UI live in the private personal layer. |
+| Face unlock | Installs a lock-screen-only PAM service for Biopass when its module is present. The Z13's IR stream pulses automatically and can be used as the primary camera for dark recognition; enrollment and the Omarchy UI live in the private personal layer. |
 
 Current Omarchy and Linux releases already provide the base touchpad udev rule,
 MT7925 Wi-Fi support, tablet-mode events, CS35L41 amplifier support, and ASUS
