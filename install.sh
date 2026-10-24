@@ -169,6 +169,14 @@ configure_battery_care() {
   "$repo/scripts/configure-battery-care"
 }
 
+configure_power_profiles() {
+  if [[ $product != *GZ302EA* ]]; then
+    echo "Skipped GZ302EA-specific power profiles"
+    return 0
+  fi
+  "$repo/scripts/configure-power-profiles"
+}
+
 install_touchscreen_layer
 link_tree
 ensure_hypr_extras_loader
@@ -177,6 +185,7 @@ fix_alc294_routing
 configure_palm_filter
 configure_face_unlock_pam
 configure_battery_care
+configure_power_profiles
 configure_function_row
 configure_gpu_memory
 

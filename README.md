@@ -34,6 +34,7 @@ Verified with:
 | Touchpad | Replaces the fixed disable-while-typing pause with movement-based palm rejection that preserves deliberate motion and two-finger scrolling; Control-click emits a secondary click. |
 | Touchscreen | Installs the shared touchscreen layer, which maps touch to the built-in display and runs Spotify through native Wayland. |
 | Battery care | Keeps the persistent charge ceiling at 80%; supports a one-shot 100% charge for travel. |
+| Power profiles | Uses Balanced on AC and Quiet on battery, avoiding Performance mode's high idle clocks and fixed fan floor while retaining boost under load. |
 | Face unlock | Installs a lock-screen-only PAM service for Biopass when its module is present. The Z13's IR stream pulses automatically and can be used as the primary camera for dark recognition; enrollment and the Omarchy UI live in the private personal layer. |
 
 Current Omarchy and Linux releases already provide the base touchpad udev rule,
@@ -61,8 +62,9 @@ The installer:
 7. makes the detachable keyboard's function row media-first;
 8. installs and starts the Z13 palm-filter service;
 9. installs the lock-screen-only Biopass PAM service when Biopass is present;
-10. sets the ASUS battery charge ceiling to 80%; and
-11. configures the AMD UMA carveout and Limine kernel arguments for dynamic GPU
+10. sets the ASUS battery charge ceiling to 80%;
+11. selects Balanced on AC and Quiet on battery; and
+12. configures the AMD UMA carveout and Limine kernel arguments for dynamic GPU
    memory.
 
 It is safe to rerun. Pass `--force` only when deliberately testing the layer on

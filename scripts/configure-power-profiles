@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# Keep routine docked use quiet without sacrificing the firmware's ability to
+# boost under load. Battery remains on the lowest-noise, lowest-power profile.
+
+set -euo pipefail
+
+if ! command -v asusctl >/dev/null; then
+  echo "asusctl is required to configure ASUS power profiles." >&2
+  exit 1
+fi
+
+asusctl profile set --battery Quiet
+# asusctl activates the profile named by the last set command even when that
+# command targets the inactive power source, so finish with the AC choice.
+asusctl profile set --ac Balanced
+asusctl profile get

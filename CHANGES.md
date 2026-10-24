@@ -1,5 +1,18 @@
 # Changes from Omarchy defaults
 
+## Quiet idle power profiles
+
+The ASUS daemon previously selected Performance whenever external power was
+connected. At an idle temperature near 48°C that profile held the CPU around
+3.9 GHz, drew roughly 19–21 W at the APU, and kept the CPU/GPU fans near
+3,900/4,300 RPM even with both displays in DPMS sleep. A controlled comparison
+showed Balanced dropping the APU to roughly 12–16 W and both fans to 0 RPM
+within six seconds, while still allowing normal boost under load.
+
+`configure-power-profiles` therefore persists Balanced on AC and Quiet on
+battery through `asusctl`. It uses the firmware profiles rather than installing
+custom fan curves.
+
 ## Mac-style Control-click
 
 The touchpad filter already observes the detachable keyboard's modifier state
