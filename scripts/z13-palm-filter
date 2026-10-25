@@ -165,6 +165,7 @@ class Contact:
         self.max_travel = 0.0
         self.history = deque()
         self.promoted = False
+        self.click_confirmed = False
         self.output_tracking_id = None
 
     def classify(self, timestamp):
@@ -181,7 +182,7 @@ class Contact:
             if contact is not self and contact.state == "finger"
         ]
 
-        if self.tool == MT_TOOL_PALM:
+        if self.tool == MT_TOOL_PALM and not self.click_confirmed:
             self.set_state("palm", "firmware-palm")
         elif modifiers_down & POINTER_MODIFIERS:
             self.set_state("finger", "modifier")
@@ -214,7 +215,7 @@ class Contact:
     def update(self, timestamp):
         self.max_travel = max(self.max_travel, self.distance_from(self.start_x, self.start_y))
 
-        if self.tool == MT_TOOL_PALM and self.state != "palm":
+        if self.tool == MT_TOOL_PALM and not self.click_confirmed and self.state != "palm":
             self.set_state("palm", "firmware-palm")
             return
 
@@ -235,6 +236,16 @@ class Contact:
                 ):
                     self.set_state("rest", "resting", REST_MOVE_MM)
                     self.history.clear()
+
+    def confirm_click(self, timestamp):
+        """Treat a physically clicked contact as deliberate for its lifetime."""
+        self.click_confirmed = True
+        if self.state != "finger":
+            if self.state is None:
+                self.anchor_x = self.start_x = self.x
+                self.anchor_y = self.start_y = self.y
+            self.reason = f"{self.reason}+click" if self.reason else "click"
+            self.promote(timestamp)
 
     def promote(self, timestamp):
         self.state = "finger"
@@ -280,6 +291,29 @@ next_tracking_id = 1
 dropping_events = False
 
 
+def confirm_clicked_contact(timestamp):
+    """Confirm the most likely contact behind a mechanical button press."""
+    candidates = [
+        contact
+        for contact in contacts.values()
+        if contact.tracking_id != -1
+        and contact.x is not None
+        and contact.y is not None
+    ]
+    if not candidates:
+        return
+
+    state_priority = {"finger": 0, "pending": 1, "rest": 1, None: 1, "palm": 2}
+    clicked_contact = min(
+        candidates,
+        key=lambda contact: (
+            state_priority.get(contact.state, 3),
+            abs(contact.x - x_max / 2),
+        ),
+    )
+    clicked_contact.confirm_click(timestamp)
+
+
 def emit_frame():
     global output_slot, output_xy, next_tracking_id
 
@@ -301,6 +335,10 @@ def emit_frame():
         previous = output_contacts.get(slot)
 
         if is_visible:
+            # The clickpad firmware often changes a deliberately pressed
+            # fingertip to MT_TOOL_PALM near the bottom edge. Keep that flag
+            # away from libinput once the physical button confirms intent.
+            output_tool = 0 if contact.click_confirmed else contact.tool
             if previous is None:
                 contact.output_tracking_id = next_tracking_id
                 next_tracking_id = next_tracking_id % 65535 + 1
@@ -308,10 +346,10 @@ def emit_frame():
                 write(e.EV_ABS, e.ABS_MT_TRACKING_ID, contact.output_tracking_id)
                 write(e.EV_ABS, e.ABS_MT_POSITION_X, contact.x)
                 write(e.EV_ABS, e.ABS_MT_POSITION_Y, contact.y)
-                write(e.EV_ABS, e.ABS_MT_TOOL_TYPE, contact.tool)
+                write(e.EV_ABS, e.ABS_MT_TOOL_TYPE, output_tool)
             else:
                 _, previous_x, previous_y, previous_tool = previous
-                if (contact.x, contact.y, contact.tool) != (
+                if (contact.x, contact.y, output_tool) != (
                     previous_x,
                     previous_y,
                     previous_tool,
@@ -321,13 +359,13 @@ def emit_frame():
                         write(e.EV_ABS, e.ABS_MT_POSITION_X, contact.x)
                     if contact.y != previous_y:
                         write(e.EV_ABS, e.ABS_MT_POSITION_Y, contact.y)
-                    if contact.tool != previous_tool:
-                        write(e.EV_ABS, e.ABS_MT_TOOL_TYPE, contact.tool)
+                    if output_tool != previous_tool:
+                        write(e.EV_ABS, e.ABS_MT_TOOL_TYPE, output_tool)
             output_contacts[slot] = (
                 contact.output_tracking_id,
                 contact.x,
                 contact.y,
-                contact.tool,
+                output_tool,
             )
             visible.append(contact)
         elif previous is not None:
@@ -388,6 +426,11 @@ def handle_pad_event(event):
             ):
                 contact.classify(timestamp)
 
+        # Some clickpads send the button before the first complete contact
+        # frame. Confirm it now if the press handler could not do so earlier.
+        if left_button and not any(contact.click_confirmed for contact in contacts.values()):
+            confirm_clicked_contact(timestamp)
+
         for slot, contact in list(contacts.items()):
             if contact.tracking_id == -1:
                 contact.finish(timestamp)
@@ -422,11 +465,12 @@ def handle_pad_event(event):
             else:
                 click_button = e.BTN_LEFT
         left_button = event.value
-        if left_button and not any(contact.state == "finger" for contact in contacts.values()):
-            for contact in contacts.values():
-                if contact.state in ("pending", "rest"):
-                    contact.reason += "+click"
-                    contact.promote(timestamp)
+        if left_button:
+            # A mechanical press is strong evidence that one active contact is
+            # intentional. This is especially important near the clickpad's
+            # bottom edge, where the firmware relabels a pressed fingertip as
+            # a palm and would otherwise leave the button down with no motion.
+            confirm_clicked_contact(timestamp)
         return
 
     if event.type != e.EV_ABS:

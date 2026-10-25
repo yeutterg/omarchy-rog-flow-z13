@@ -72,6 +72,13 @@ contacts are promoted together for two-finger scrolling. The physical device
 is grabbed only while the service is healthy; if it exits, the grab is
 released and the original touchpad resumes.
 
+The clickpad firmware can relabel a fingertip as a palm when physical pressure
+is applied near its bottom edge. The filter now treats the mechanical button
+press as confirmation that the selected contact is intentional, keeps it
+visible for the rest of that contact, and reports it to libinput as a finger.
+This preserves pointer motion throughout a physical click-and-drag without
+loosening palm rejection for ordinary unclicked contacts.
+
 Generic touchscreen-to-display mapping and Spotify's native Wayland flags now
 live in `omarchy-touchscreen`, which this repo installs as a dependency. This
 repo retains only the Z13-specific touchpad behavior.
