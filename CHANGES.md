@@ -22,11 +22,14 @@ of `BTN_LEFT`. The choice is latched until release, avoiding stuck buttons if
 Control is released first. Doing this before Hyprland receives the event keeps
 normal pointer focus and works on application windows and shell layer surfaces.
 
-The virtual device exposes actual left, right and middle buttons rather than
-the kernel `INPUT_PROP_BUTTONPAD` marker. That marker makes libinput replace a
-button code using its own finger count, which erased the Control-click mapping.
-The filter therefore maps one-, two- and three-finger physical presses to left,
-right and middle itself; tap-to-click remains handled by libinput.
+The filtered touch surface retains the kernel `INPUT_PROP_BUTTONPAD` marker so
+libinput applies the correct clickpad thumb/index tracking during a physical
+drag. Mapped left, right and middle clicks are emitted through a companion
+virtual pointer instead of the touch surface. This keeps libinput from
+replacing Control-click with its own finger-count decision while button state
+still combines normally at the Wayland seat. The filter maps one-, two- and
+three-finger physical presses to left, right and middle itself; tap-to-click
+remains handled by libinput.
 
 `SECONDARY_CLICK_MODE=control-only` is available for a personal systemd
 override. It makes every unmodified physical press a primary click while

@@ -104,6 +104,7 @@ x_max = 1
 y_max = 1
 slot_count = 1
 virtual_pad = None
+virtual_buttons = None
 
 
 def millimeters(units):
@@ -317,10 +318,11 @@ def confirm_clicked_contact(timestamp):
 def emit_frame():
     global output_slot, output_xy, next_tracking_id
 
-    events = []
+    pad_events = []
+    button_events = []
 
     def write(event_type, code, value):
-        events.append((event_type, code, value))
+        pad_events.append((event_type, code, value))
 
     def select_slot(slot):
         global output_slot
@@ -374,18 +376,22 @@ def emit_frame():
             del output_contacts[slot]
 
     visible_count = len(visible)
-    desired_buttons = {
-        e.BTN_TOUCH: int(visible_count > 0),
+    desired_pad_buttons = {e.BTN_TOUCH: int(visible_count > 0)}
+    for index, button in enumerate(TOOL_BUTTONS):
+        desired_pad_buttons[button] = int(visible_count == index + 1)
+
+    desired_click_buttons = {
         e.BTN_LEFT: int(left_button and click_button == e.BTN_LEFT),
         e.BTN_RIGHT: int(left_button and click_button == e.BTN_RIGHT),
         e.BTN_MIDDLE: int(left_button and click_button == e.BTN_MIDDLE),
     }
-    for index, button in enumerate(TOOL_BUTTONS):
-        desired_buttons[button] = int(visible_count == index + 1)
-
-    for button, value in desired_buttons.items():
+    for button, value in desired_pad_buttons.items():
         if output_buttons.get(button, 0) != value:
             write(e.EV_KEY, button, value)
+            output_buttons[button] = value
+    for button, value in desired_click_buttons.items():
+        if output_buttons.get(button, 0) != value:
+            button_events.append((e.EV_KEY, button, value))
             output_buttons[button] = value
 
     if visible and (visible[0].x, visible[0].y) != output_xy:
@@ -393,10 +399,14 @@ def emit_frame():
         write(e.EV_ABS, e.ABS_X, output_xy[0])
         write(e.EV_ABS, e.ABS_Y, output_xy[1])
 
-    if events and virtual_pad:
-        for event in events:
+    if pad_events and virtual_pad:
+        for event in pad_events:
             virtual_pad.write(*event)
         virtual_pad.syn()
+    if button_events and virtual_buttons:
+        for event in button_events:
+            virtual_buttons.write(*event)
+        virtual_buttons.syn()
 
 
 def handle_pad_event(event):
@@ -515,7 +525,7 @@ def is_physical_pad(device):
 
 
 def main():
-    global resolution, x_max, y_max, slot_count, virtual_pad
+    global resolution, x_max, y_max, slot_count, virtual_pad, virtual_buttons
 
     pad = matching_device(is_physical_pad)
     if not pad:
@@ -567,9 +577,23 @@ def main():
             product=pad.info.product,
             version=pad.info.version,
             bustype=pad.info.bustype,
-            # Expose real left/right/middle buttons instead of a one-button
-            # clickpad. Otherwise libinput replaces BTN_RIGHT using its own
-            # finger-count decision after this filter has mapped Control-click.
+            # Preserve the hardware's clickpad identity so libinput can keep a
+            # moving index finger active while a thumb holds the pad down.
+            input_props=[e.INPUT_PROP_POINTER, e.INPUT_PROP_BUTTONPAD],
+        )
+        virtual_buttons = evdev.UInput(
+            {
+                e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
+                e.EV_REL: [e.REL_X, e.REL_Y],
+            },
+            name=PAD_NAME + " (mapped buttons)",
+            vendor=pad.info.vendor,
+            product=pad.info.product,
+            version=pad.info.version,
+            bustype=pad.info.bustype,
+            # Emit the already-mapped click on a companion pointer. If it were
+            # sent through the clickpad, libinput would replace Control-click
+            # with its own finger-count decision.
             input_props=[e.INPUT_PROP_POINTER],
         )
         pad.grab()
@@ -607,6 +631,8 @@ def main():
             except OSError:
                 pass
             virtual_pad.close()
+            if virtual_buttons:
+                virtual_buttons.close()
         pad.close()
         for keyboard in keyboards:
             keyboard.close()
